@@ -20,7 +20,7 @@ import           Polysemy.Internal.Union
 -- @since 0.5.0.0
 data Forklift r = forall a. Forklift
   { responseMVar :: MVar a
-  , request      :: Union r (Sem r) a
+  , request      :: Union r r a
   }
 
 

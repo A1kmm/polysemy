@@ -197,7 +197,7 @@ newtype Sem r a = Sem
   { runSem
         :: ∀ m
          . Monad m
-        => (∀ x. Union r (Sem r) x -> m x)
+        => (∀ x. Union r r x -> m x)
         -> m a
   }
 
@@ -241,7 +241,7 @@ type family Members es r :: Constraint where
 -- | Like 'runSem' but flipped for better ergonomics sometimes.
 usingSem
     :: Monad m
-    => (∀ x. Union r (Sem r) x -> m x)
+    => (∀ x. Union r r x -> m x)
     -> Sem r a
     -> m a
 usingSem k m = runSem m k
@@ -301,13 +301,13 @@ instance Member Fixpoint r => MonadFix (Sem r) where
   {-# INLINE mfix #-}
 
 
-liftSem :: Union r (Sem r) a -> Sem r a
+liftSem :: Union r r a -> Sem r a
 liftSem u = Sem $ \k -> k u
 {-# INLINE liftSem #-}
 
 
 hoistSem
-    :: (∀ x. Union r (Sem r) x -> Union r' (Sem r') x)
+    :: (∀ x. Union r r x -> Union r' r' x)
     -> Sem r a
     -> Sem r' a
 hoistSem nat (Sem m) = Sem $ \k -> m $ \u -> k $ nat u

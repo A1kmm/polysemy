@@ -191,7 +191,6 @@ runWriterSTMAction write = interpretH $ \case
     {-# INLINE commitPass #-}
 {-# INLINE runWriterSTMAction #-}
 
-
 -- TODO (KingoftheHomeless):
 -- Benchmark to see if switching to a more flexible variant
 -- would incur a performance loss
