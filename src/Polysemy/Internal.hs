@@ -472,7 +472,7 @@ run (Sem m) = runIdentity $ m absurdU
 runM :: Monad m => Sem '[Embed m] a -> m a
 runM (Sem m) = m $ \z ->
   case extract z of
-    Weaving e s _ f _ -> do
+    Weaving (WeavingDetails e s _ f _) -> do
       a <- unEmbed e
       pure $ f $ a <$ s
 {-# INLINE runM #-}

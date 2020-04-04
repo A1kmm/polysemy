@@ -81,7 +81,7 @@ interpretH
 interpretH f (Sem m) = m $ \u ->
   case decomp u of
     Left  x -> liftSem $ hoist (interpretH f) x
-    Right (Weaving e s d y v) -> do
+    Right (Weaving (WeavingDetails e s d y v)) -> do
       a <- runTactics s d v $ f e
       pure $ y a
 {-# INLINE interpretH #-}
@@ -104,7 +104,7 @@ interpretInStateT f s (Sem m) = Sem $ \k ->
                     (uncurry $ interpretInStateT f)
                     (Just . snd)
             $ x
-        Right (Weaving e z _ y _) ->
+        Right (Weaving (WeavingDetails e z _ y _)) ->
           fmap (y . (<$ z)) $ S.mapStateT (usingSem k) $ f e
 {-# INLINE interpretInStateT #-}
 
@@ -126,7 +126,7 @@ interpretInLazyStateT f s (Sem m) = Sem $ \k ->
                     (uncurry $ interpretInLazyStateT f)
                     (Just . snd)
             $ x
-        Right (Weaving e z _ y _) ->
+        Right (Weaving (WeavingDetails e z _ y _)) ->
           fmap (y . (<$ z)) $ LS.mapStateT (usingSem k) $ f e
 {-# INLINE interpretInLazyStateT #-}
 
@@ -166,7 +166,7 @@ reinterpretH
 reinterpretH f (Sem m) = Sem $ \k -> m $ \u ->
   case decompCoerce u of
     Left x  -> k $ hoist (reinterpretH f) $ x
-    Right (Weaving e s d y v) -> do
+    Right (Weaving (WeavingDetails e s d y v)) -> do
       a <- usingSem k $ runTactics s (raiseUnder . d) v $ f e
       pure $ y a
 {-# INLINE[3] reinterpretH #-}
@@ -203,7 +203,7 @@ reinterpret2H
 reinterpret2H f (Sem m) = Sem $ \k -> m $ \u ->
   case decompCoerce u of
     Left x  -> k $ weaken $ hoist (reinterpret2H f) $ x
-    Right (Weaving e s d y v) -> do
+    Right (Weaving (WeavingDetails e s d y v)) -> do
       a <- usingSem k $ runTactics s (raiseUnder2 . d) v $ f e
       pure $ y a
 {-# INLINE[3] reinterpret2H #-}
@@ -235,7 +235,7 @@ reinterpret3H
 reinterpret3H f (Sem m) = Sem $ \k -> m $ \u ->
   case decompCoerce u of
     Left x  -> k . weaken . weaken . hoist (reinterpret3H f) $ x
-    Right (Weaving e s d y v) -> do
+    Right (Weaving (WeavingDetails e s d y v)) -> do
       a <- usingSem k $ runTactics s (raiseUnder3 . d) v $ f e
       pure $ y a
 {-# INLINE[3] reinterpret3H #-}
@@ -333,7 +333,7 @@ interceptUsingH
     -> Sem r a
 interceptUsingH pr f (Sem m) = Sem $ \k -> m $ \u ->
   case prjUsing pr u of
-    Just (Weaving e s d y v) ->
+    Just (Weaving (WeavingDetails e s d y v)) ->
       usingSem k $ fmap y $ runTactics s (raise . d) v $ f e
     Nothing -> k $ hoist (interceptUsingH pr f) u
 {-# INLINE interceptUsingH #-}
@@ -351,7 +351,8 @@ rewrite
 rewrite f (Sem m) = Sem $ \k -> m $ \u ->
   k $ hoist (rewrite f) $ case decompCoerce u of
     Left x -> x
-    Right (Weaving e s d n y) -> Union $ UnionDetails Here $ Weaving (f e) s d n y
+    Right (Weaving (WeavingDetails e s d n y)) ->
+      Union $ UnionDetails Here $ Weaving $ WeavingDetails (f e) s d n y
 
 
 ------------------------------------------------------------------------------
@@ -368,5 +369,6 @@ transform
 transform f (Sem m) = Sem $ \k -> m $ \u ->
   k $ hoist (transform f) $ case decomp u of
     Left g -> g
-    Right (Weaving e s wv ex ins) -> injWeaving (Weaving (f e) s wv ex ins)
+    Right (Weaving (WeavingDetails e s wv ex ins)) ->
+      injWeaving (Weaving $ WeavingDetails (f e) s wv ex ins)
 
