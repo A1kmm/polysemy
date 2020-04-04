@@ -70,24 +70,24 @@ instance Functor (Union r m) where
   {-# INLINE fmap #-}
 
 
-data Weaving e m a where
+data Weaving e mAfter resultType where
   Weaving
-    :: forall f e m a b n. (Functor f, Monad m)
-    =>   { weaveEffect :: e m a
+    :: forall f e mBefore a resultType mAfter. (Functor f, Monad mBefore)
+    =>   { weaveEffect :: e mBefore a
          -- ^ The original effect GADT originally lifted via
-         -- 'Polysemy.Internal.send'. There is an invariant that @m ~ Sem r0@,
+         -- 'Polysemy.Internal.send'. There is an invariant that @mBefore ~ Sem r0@,
          -- where @r0@ is the effect row that was in scope when this 'Weaving'
          -- was originally created.
        , weaveState :: f ()
          -- ^ A piece of state that other effects' interpreters have already
          -- woven through this 'Weaving'. @f@ is a 'Functor', so you can always
          -- 'fmap' into this thing.
-       , weaveDistrib :: forall x. f (m x) -> n (f x)
-         -- ^ Distribute @f@ by transforming @m@ into @n@. We have invariants
-         -- on @m@ and @n@, which means in actuality this function looks like
+       , weaveDistrib :: forall x. f (mBefore x) -> mAfter (f x)
+         -- ^ Distribute @f@ by transforming @mBefore@ into @mAfter@. We have invariants
+         -- on @mBefore@ and @mAfter@, which means in actuality this function looks like
          -- @f ('Polysemy.Sem' (Some ': Effects ': r) x) -> 'Polysemy.Sem' r (f
          -- x)@.
-       , weaveResult :: f a -> b
+       , weaveResult :: f a -> resultType
          -- ^ Even though @f a@ is the moral resulting type of 'Weaving', we
          -- can't expose that fact; such a thing would prevent 'Polysemy.Sem'
          -- from being a 'Monad'.
@@ -96,7 +96,7 @@ data Weaving e m a where
          -- guarantees that such a thing will succeed (for example,
          -- 'Polysemy.Error.Error' might have 'Polysemy.Error.throw'n.)
        }
-    -> Weaving e n b
+    -> Weaving e mAfter resultType
 
 instance Functor (Weaving e m) where
   fmap f (Weaving e s d f' v) = Weaving e s d (f . f') v
