@@ -351,7 +351,7 @@ rewrite
 rewrite f (Sem m) = Sem $ \k -> m $ \u ->
   k $ hoist (rewrite f) $ case decompCoerce u of
     Left x -> x
-    Right (Weaving e s d n y) -> Union Here $ Weaving (f e) s d n y
+    Right (Weaving e s d n y) -> Union $ UnionDetails Here $ Weaving (f e) s d n y
 
 
 ------------------------------------------------------------------------------

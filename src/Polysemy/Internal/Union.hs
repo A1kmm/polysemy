@@ -15,6 +15,7 @@
 
 module Polysemy.Internal.Union
   ( Union (..)
+  , UnionDetails (..)
   , Weaving (..)
   , Member
   , MemberWithError
@@ -57,16 +58,17 @@ import Polysemy.Internal.CustomErrors
 -- | An extensible, type-safe union. The @r@ type parameter is a type-level
 -- list of effects, any one of which may be held within the 'Union'.
 data Union (r :: EffectRow) (m :: Type -> Type) a where
-  Union
-      :: -- A proof that the effect is actually in @r@.
-         ElemOf e r
-         -- The effect to wrap. The functions 'prj' and 'decomp' can help
-         -- retrieve this value later.
-      -> Weaving e m a
-      -> Union r m a
+  Union :: UnionDetails r m a e -> Union r m a
+
+data UnionDetails r m a e = UnionDetails
+  -- A proof that the effect is actually in @r@.
+  (ElemOf e r)
+  -- The effect to wrap. The functions 'prj' and 'decomp' can help
+  -- retrieve this value later.
+  (Weaving e m a)
 
 instance Functor (Union r m) where
-  fmap f (Union w t) = Union w $ fmap f t
+  fmap f (Union (UnionDetails w t)) = Union $ UnionDetails w $ fmap f t
   {-# INLINE fmap #-}
 
 
@@ -111,7 +113,8 @@ weave
     -> (∀ x. s x -> Maybe x)
     -> Union r m a
     -> Union r n (s a)
-weave s' d v' (Union w (Weaving e s nt f v)) = Union w $
+weave s' d v' (Union (UnionDetails w (Weaving e s nt f v))) = Union $
+  UnionDetails w $
     Weaving e (Compose $ s <$ s')
               (fmap Compose . d . fmap nt . getCompose)
               (fmap f . getCompose)
@@ -126,7 +129,8 @@ hoist
     => (∀ x. m x -> n x)
     -> Union r m a
     -> Union r n a
-hoist f' (Union w (Weaving e s nt f v)) = Union w $ Weaving e s (f' . nt) f v
+hoist f' (Union (UnionDetails w (Weaving e s nt f v))) =
+  Union $ UnionDetails w $ Weaving e s (f' . nt) f v
 {-# INLINE hoist #-}
 
 
@@ -256,30 +260,30 @@ tryMembership = tryMembership' @r @e
 -- | Decompose a 'Union'. Either this union contains an effect @e@---the head
 -- of the @r@ list---or it doesn't.
 decomp :: Union (e ': r) m a -> Either (Union r m a) (Weaving e m a)
-decomp (Union p a) =
+decomp (Union (UnionDetails p a)) =
   case p of
     Here  -> Right a
-    There pr -> Left $ Union pr a
+    There pr -> Left $ Union $ UnionDetails pr a
 {-# INLINE decomp #-}
 
 ------------------------------------------------------------------------------
 -- | Retrieve the last effect in a 'Union'.
 extract :: Union '[e] m a -> Weaving e m a
-extract (Union Here a)   = a
-extract (Union (There g) _) = case g of {}
+extract (Union (UnionDetails Here a))   = a
+extract (Union (UnionDetails (There g) _)) = case g of {}
 {-# INLINE extract #-}
 
 
 ------------------------------------------------------------------------------
 -- | An empty union contains nothing, so this function is uncallable.
 absurdU :: Union '[] m a -> b
-absurdU (Union pr _) = case pr of {}
+absurdU (Union (UnionDetails pr _)) = case pr of {}
 
 
 ------------------------------------------------------------------------------
 -- | Weaken a 'Union' so it is capable of storing a new sort of effect.
 weaken :: forall e r m a. Union r m a -> Union (e ': r) m a
-weaken (Union pr a) = Union (There pr) a
+weaken (Union (UnionDetails pr a)) = Union $ UnionDetails (There pr) a
 {-# INLINE weaken #-}
 
 
@@ -299,7 +303,7 @@ inj e = injWeaving $
 -- | Lift an effect @e@ into a 'Union' capable of holding it,
 -- given an explicit proof that the effect exists in @r@
 injUsing :: forall e r m a. Monad m => ElemOf e r -> e m a -> Union r m a
-injUsing pr e = Union pr $
+injUsing pr e = Union $ UnionDetails pr $
   Weaving e (Identity ())
             (fmap Identity . runIdentity)
             runIdentity
@@ -309,7 +313,7 @@ injUsing pr e = Union pr $
 ------------------------------------------------------------------------------
 -- | Lift a @'Weaving' e@ into a 'Union' capable of holding it.
 injWeaving :: forall e r m a. Member e r => Weaving e m a -> Union r m a
-injWeaving = Union membership
+injWeaving = Union . UnionDetails membership
 {-# INLINE injWeaving #-}
 
 ------------------------------------------------------------------------------
@@ -330,7 +334,7 @@ prjUsing
    . ElemOf e r
   -> Union r m a
   -> Maybe (Weaving e m a)
-prjUsing pr (Union sn a) = (\Refl -> a) <$> sameMember pr sn
+prjUsing pr (Union (UnionDetails sn a)) = (\Refl -> a) <$> sameMember pr sn
 {-# INLINE prjUsing #-}
 
 ------------------------------------------------------------------------------
@@ -339,8 +343,8 @@ prjUsing pr (Union sn a) = (\Refl -> a) <$> sameMember pr sn
 decompCoerce
     :: Union (e ': r) m a
     -> Either (Union (f ': r) m a) (Weaving e m a)
-decompCoerce (Union p a) =
+decompCoerce (Union (UnionDetails p a)) =
   case p of
     Here  -> Right a
-    There pr -> Left (Union (There pr) a)
+    There pr -> Left (Union $ UnionDetails (There pr) a)
 {-# INLINE decompCoerce #-}
