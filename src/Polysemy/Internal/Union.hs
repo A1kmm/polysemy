@@ -49,6 +49,7 @@ import Data.Functor.Identity
 import Data.Kind
 import Data.Typeable
 import Polysemy.Internal.Kind
+import {-# SOURCE #-} Polysemy.Internal
 
 #ifndef NO_ERROR_MESSAGES
 import Polysemy.Internal.CustomErrors
@@ -58,42 +59,40 @@ import Polysemy.Internal.CustomErrors
 ------------------------------------------------------------------------------
 -- | An extensible, type-safe union. The @r@ type parameter is a type-level
 -- list of effects, any one of which may be held within the 'Union'.
-data Union (r :: EffectRow) (m :: Type -> Type) a where
-  Union :: !(UnionDetails r m a e) -> Union r m a
+data Union (r :: EffectRow) (mWoven :: Type -> Type) a where
+  Union :: !(UnionDetails r mWoven a e) -> Union r mWoven a
 
-data UnionDetails r m a e = UnionDetails
+data UnionDetails r mWoven a e = UnionDetails
   -- A proof that the effect is actually in @r@.
   (ElemOf e r)
   -- The effect to wrap. The functions 'prj' and 'decomp' can help
   -- retrieve this value later.
-  (Weaving e m a)
+  (Weaving e mWoven a)
 
-instance Functor (Union r m) where
+instance Functor (Union r mWoven) where
   fmap f (Union (UnionDetails w t)) = Union $ UnionDetails w $ fmap f t
   {-# INLINE fmap #-}
 
 
 data Weaving e mAfter resultType where
   Weaving
-    :: forall f e mBefore a resultType mAfter. (Functor f, Monad mBefore)
-    => !(WeavingDetails f e mBefore a resultType mAfter)
+    :: forall f e rBefore a resultType mAfter. (Functor f)
+    => !(WeavingDetails f e rBefore a resultType mAfter)
     -> Weaving e mAfter resultType
 
-data (Functor f, Monad mBefore) => WeavingDetails f e mBefore a resultType mAfter =
+data Functor f => WeavingDetails f e rBefore a resultType mAfter =
   WeavingDetails {
-    weaveEffect :: e mBefore a
+    weaveEffect :: e (Sem rBefore) a
     -- ^ The original effect GADT originally lifted via
-    -- 'Polysemy.Internal.send'. There is an invariant that @mBefore ~ Sem r0@,
-    -- where @r0@ is the effect row that was in scope when this 'Weaving'
-    -- was originally created.
+    -- 'Polysemy.Internal.send'.
   , weaveState :: f ()
     -- ^ A piece of state that other effects' interpreters have already
     -- woven through this 'Weaving'. @f@ is a 'Functor', so you can always
     -- 'fmap' into this thing.
-  , weaveDistrib :: forall x. f (mBefore x) -> mAfter (f x)
+  , weaveDistrib :: forall x. f (Sem rBefore x) -> mAfter (f x)
     -- ^ Distribute @f@ by transforming @mBefore@ into @mAfter@. We have invariants
-    -- on @mBefore@ and @mAfter@, which means in actuality this function looks like
-    -- @f ('Polysemy.Sem' (Some ': Effects ': r) x) -> 'Polysemy.Sem' r (f
+    -- on @rBefore@ and @rAfter@, which means in actuality this function looks like
+    -- @f ('Polysemy.Sem' (Some ': Effects ': rBefore) x) -> 'Polysemy.Sem' rBefore (f
     -- x)@.
   , weaveResult :: f a -> resultType
     -- ^ Even though @f a@ is the moral resulting type of 'Weaving', we
@@ -113,12 +112,12 @@ instance Functor (Weaving e m) where
 
 
 weave
-    :: (Functor s, Functor m, Functor n)
+    :: (Functor s, Functor mAfter)
     => s ()
-    -> (∀ x. s (m x) -> n (s x))
+    -> (∀ x. s (Sem rBefore x) -> mAfter (s x))
     -> (∀ x. s x -> Maybe x)
-    -> Union r m a
-    -> Union r n (s a)
+    -> Union r (Sem rBefore) a
+    -> Union r mAfter (s a)
 weave s' d v' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
   Union $ UnionDetails w $ Weaving $ WeavingDetails
               e (Compose $ s <$ s')
@@ -129,12 +128,9 @@ weave s' d v' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
 
 
 hoist
-    :: ( Functor m
-       , Functor n
-       )
-    => (∀ x. m x -> n x)
-    -> Union r m a
-    -> Union r n a
+    :: (∀ x. Sem rBefore x -> mAfter x)
+    -> Union r (Sem rBefore) a
+    -> Union r mAfter a
 hoist f' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
   Union $ UnionDetails w $ Weaving $ WeavingDetails e s (f' . nt) f v
 {-# INLINE hoist #-}
@@ -296,7 +292,7 @@ weaken (Union (UnionDetails pr a)) = Union $ UnionDetails (There pr) a
 
 ------------------------------------------------------------------------------
 -- | Lift an effect @e@ into a 'Union' capable of holding it.
-inj :: forall e r m a. (Monad m , Member e r) => e m a -> Union r m a
+inj :: forall e r rWoven a. (Member e r) => e (Sem rWoven) a -> Union r (Sem rWoven) a
 inj e = injWeaving $
   Weaving $ WeavingDetails e (Identity ())
               (fmap Identity . runIdentity)
@@ -308,7 +304,8 @@ inj e = injWeaving $
 ------------------------------------------------------------------------------
 -- | Lift an effect @e@ into a 'Union' capable of holding it,
 -- given an explicit proof that the effect exists in @r@
-injUsing :: forall e r m a. Monad m => ElemOf e r -> e m a -> Union r m a
+injUsing :: forall e r rWoven a.
+  ElemOf e r -> e (Sem rWoven) a -> Union r (Sem rWoven) a
 injUsing pr e = Union $ UnionDetails pr $ Weaving $ WeavingDetails
             e (Identity ())
             (fmap Identity . runIdentity)
