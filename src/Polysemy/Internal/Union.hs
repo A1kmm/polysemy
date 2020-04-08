@@ -112,11 +112,11 @@ instance Functor (Weaving e m) where
 
 
 weave
-    :: (Functor s, Functor mAfter)
+    :: (Functor s, Functor mMid, Functor mAfter)
     => s ()
-    -> (∀ x. s (Sem rBefore x) -> mAfter (s x))
+    -> (∀ x. s (mMid x) -> mAfter (s x))
     -> (∀ x. s x -> Maybe x)
-    -> Union r (Sem rBefore) a
+    -> Union r mMid a
     -> Union r mAfter (s a)
 weave s' d v' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
   Union $ UnionDetails w $ Weaving $ WeavingDetails
@@ -128,8 +128,8 @@ weave s' d v' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
 
 
 hoist
-    :: (∀ x. Sem rBefore x -> mAfter x)
-    -> Union r (Sem rBefore) a
+    :: (∀ x. mBefore x -> mAfter x)
+    -> Union r mBefore a
     -> Union r mAfter a
 hoist f' (Union (UnionDetails w (Weaving (WeavingDetails e s nt f v)))) =
   Union $ UnionDetails w $ Weaving $ WeavingDetails e s (f' . nt) f v
