@@ -90,10 +90,9 @@ data Functor f => WeavingDetails f e rBefore a resultType mAfter =
     -- woven through this 'Weaving'. @f@ is a 'Functor', so you can always
     -- 'fmap' into this thing.
   , weaveDistrib :: forall x. f (Sem rBefore x) -> mAfter (f x)
-    -- ^ Distribute @f@ by transforming @mBefore@ into @mAfter@. We have invariants
-    -- on @rBefore@ and @rAfter@, which means in actuality this function looks like
-    -- @f ('Polysemy.Sem' (Some ': Effects ': rBefore) x) -> 'Polysemy.Sem' rBefore (f
-    -- x)@.
+    -- ^ Distribute @f@ by transforming @Sem rBefore@ into @mAfter@. We have an
+    -- invariants on @rBefore@, which means in actuality this function looks like
+    -- @f ('Polysemy.Sem' rBefore x) -> mAfter (f x)@.
   , weaveResult :: f a -> resultType
     -- ^ Even though @f a@ is the moral resulting type of 'Weaving', we
     -- can't expose that fact; such a thing would prevent 'Polysemy.Sem'
